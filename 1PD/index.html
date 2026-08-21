@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELOPEP · Sprint 1</title>
+<style>
+  :root{
+    --paper:#EDEFEA;
+    --paper-raised:#F7F8F5;
+    --ink:#1E2521;
+    --ink-soft:#565F58;
+    --ink-faint:#8B9188;
+    --line:#D2D6CC;
+    --line-strong:#B7BCAF;
+    --accent:#2F5D50;
+    --accent-soft:#DCE6E1;
+    --backlog:#8A8A82;
+    --backlog-bg:#EAEAE5;
+    --selected:#4C6B8A;
+    --selected-bg:#E1E9F0;
+    --progress:#B8791D;
+    --progress-bg:#F4E7D2;
+    --done:#2F7A56;
+    --done-bg:#DEEBE3;
+    --danger:#B23A2E;
+    --danger-bg:#F5E1DE;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    padding:2.5rem 1.5rem 5rem;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:1rem;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:1.1rem;
+    margin-bottom:1.6rem;
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:0 0 .35rem;
+  }
+  h1{
+    font-family:Georgia,"Iowan Old Style","Times New Roman",serif;
+    font-weight:600;
+    font-size:32px;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  .updated{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    color:var(--ink-faint);
+    text-align:right;
+  }
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    margin-bottom:2rem;
+  }
+  .stat{
+    background:var(--paper-raised);
+    padding:1rem 1.15rem;
+  }
+  .stat .label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+    margin:0 0 .4rem;
+  }
+  .stat .value{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:24px;
+    font-weight:600;
+    margin:0;
+  }
+  .stat .sub{font-size:12px;color:var(--ink-faint);margin-top:.25rem;}
+
+  .tabs{
+    display:flex;
+    gap:0;
+    border-bottom:1px solid var(--line-strong);
+    margin-bottom:1.6rem;
+    flex-wrap:wrap;
+  }
+  .tab{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    padding:.6rem 1rem;
+    border:none;
+    background:transparent;
+    color:var(--ink-faint);
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+    margin-bottom:-1px;
+  }
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  .sprint-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    margin-bottom:2.2rem;
+  }
+  .sprint-card{
+    background:var(--paper-raised);
+    padding:1rem 1.15rem;
+    cursor:pointer;
+  }
+  .sprint-card:hover{background:var(--accent-soft);}
+  .sprint-card .sname{font-size:13px;font-weight:600;margin:0 0 .5rem;}
+  .sprint-card .sbar{height:8px;background:var(--paper);border:1px solid var(--line);margin-bottom:.5rem;overflow:hidden;}
+  .sprint-card .sbar-fill{height:100%;background:var(--done);}
+  .sprint-card .smeta{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-soft);display:flex;justify-content:space-between;}
+  .sprint-card.empty-sprint{opacity:.55;}
+
+  .status-row{
+    display:flex;
+    align-items:center;
+    gap:.6rem;
+    margin-bottom:1.2rem;
+    flex-wrap:wrap;
+  }
+  .status-pill{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    padding:.35rem .7rem;
+    border:1px solid var(--line-strong);
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .status-pill .dot{width:8px;height:8px;border-radius:50%;}
+  .status-pill.ok{border-color:var(--done);color:var(--done);}
+  .status-pill.ok .dot{background:var(--done);}
+  .status-pill.warn{border-color:var(--progress);color:var(--progress);}
+  .status-pill.warn .dot{background:var(--progress);}
+  .status-pill.risk{border-color:var(--danger);color:var(--danger);}
+  .status-pill.risk .dot{background:var(--danger);}
+  .status-detail{font-size:12.5px;color:var(--ink-soft);}
+
+  .insight{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-left:3px solid var(--accent);
+    padding:.85rem 1rem;
+    margin-bottom:2rem;
+    font-size:13px;
+    line-height:1.55;
+    color:var(--ink);
+  }
+  .insight b{color:var(--accent);}
+  .insight .tag{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--accent);
+    display:block;
+    margin-bottom:.35rem;
+  }
+
+  section.block{margin-bottom:2.2rem;}
+  .block-title{
+    font-family:Georgia, serif;
+    font-size:15px;
+    font-weight:600;
+    margin:0 0 .8rem;
+    display:flex;
+    align-items:baseline;
+    gap:.5rem;
+  }
+  .block-title .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);}
+
+  .workload{display:flex;flex-direction:column;gap:10px;}
+  .wl-row{display:grid;grid-template-columns:160px 1fr 64px;align-items:center;gap:12px;}
+  .wl-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wl-bar{height:16px;background:var(--paper-raised);border:1px solid var(--line);display:flex;overflow:hidden;}
+  .wl-seg{height:100%;}
+  .wl-total{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft);text-align:right;}
+
+  .legend{display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.7rem;font-size:11px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:9px;height:9px;display:inline-block;}
+
+  .controls{
+    display:flex;
+    gap:.6rem;
+    flex-wrap:wrap;
+    margin-bottom:1.1rem;
+  }
+  .controls input, .controls select{
+    font-family:inherit;
+    font-size:13px;
+    padding:.5rem .65rem;
+    border:1px solid var(--line-strong);
+    background:var(--paper-raised);
+    color:var(--ink);
+  }
+  .controls input{flex:1;min-width:160px;}
+  .view-toggle{display:flex;border:1px solid var(--ink);margin-left:auto;}
+  .view-toggle button{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    padding:.5rem .9rem;
+    border:none;
+    background:var(--paper-raised);
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .view-toggle button.active{background:var(--ink);color:var(--paper);}
+
+  .board{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:14px;
+  }
+  .col{background:var(--paper-raised);border:1px solid var(--line);min-height:60px;}
+  .col-head{
+    padding:.7rem .85rem;
+    border-bottom:2px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .col-head .name{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+  .col-head .count{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);}
+  .col-body{padding:.6rem;display:flex;flex-direction:column;gap:.5rem;}
+
+  .card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-left:3px solid var(--line-strong);
+    padding:.65rem .75rem;
+    cursor:default;
+  }
+  .card .key{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin-bottom:.25rem;}
+  .card .summary{font-size:13px;font-weight:600;line-height:1.35;margin-bottom:.5rem;}
+  .card-meta{display:flex;justify-content:space-between;align-items:center;}
+  .avatar{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--accent-soft);color:var(--accent);
+    font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+    font-family:"IBM Plex Mono",monospace;
+    flex-shrink:0;
+  }
+  .avatar.unassigned{background:var(--paper-raised);color:var(--ink-faint);border:1px dashed var(--line-strong);}
+  .meta-right{display:flex;align-items:center;gap:6px;}
+  .prio-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .time-chip{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-soft);}
+
+  .people{display:flex;flex-direction:column;gap:14px;}
+  .person{background:var(--paper-raised);border:1px solid var(--line);}
+  .person-head{
+    padding:.8rem .95rem;
+    display:flex;align-items:center;gap:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .person-head .avatar{width:30px;height:30px;font-size:12px;}
+  .person-head .pname{font-size:14px;font-weight:600;}
+  .person-head .pcount{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);}
+  .person-body{padding:.5rem .6rem;display:flex;flex-direction:column;gap:.5rem;}
+
+  .empty{padding:1.2rem;text-align:center;font-size:12px;color:var(--ink-faint);}
+
+  footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:11px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;}
+
+  @media (max-width:820px){
+    .board{grid-template-columns:1fr 1fr;}
+  }
+  @media (max-width:560px){
+    .board{grid-template-columns:1fr;}
+    .wl-row{grid-template-columns:110px 1fr 50px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">ELOPEP · Pepsi</p>
+      <h1 id="pageTitle">Sprint tracker</h1>
+    </div>
+    <div class="updated" id="updated"></div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div id="overviewView">
+    <div class="sprint-grid" id="sprintGrid"></div>
+  </div>
+
+  <div id="sprintView">
+    <div class="status-row" id="statusRow"></div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="insight" id="insight"></div>
+
+    <section class="block">
+      <p class="block-title">Carga por persona <span class="n" id="wl-n"></span></p>
+      <div class="workload" id="workload"></div>
+      <div class="legend">
+        <span><i style="background:var(--backlog)"></i>Backlog</span>
+        <span><i style="background:var(--selected)"></i>Selected for development</span>
+        <span><i style="background:var(--progress)"></i>In progress</span>
+        <span><i style="background:var(--done)"></i>Done</span>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="controls">
+        <input type="text" id="search" placeholder="Buscar por clave, resumen o persona…">
+        <select id="filterAssignee"></select>
+        <select id="filterPriority">
+          <option value="">Toda prioridad</option>
+        </select>
+        <div class="view-toggle">
+          <button id="btnBoard" class="active">Board</button>
+          <button id="btnPeople">Por persona</button>
+        </div>
+      </div>
+
+      <div class="board" id="board"></div>
+      <div class="people" id="people" style="display:none;"></div>
+    </section>
+  </div>
+
+  <footer id="footerLine"></footer>
+</div>
+
+<script>
+const SPRINTS = {
+"Sprint 1": [
+{key:"ELOPEP-2344",summary:"Validar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:3600,remaining:3600,spent:0},
+{key:"ELOPEP-2342",summary:"Documentar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2340",summary:"Definir estructura de las tablas",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:10800,remaining:10800,spent:0},
+{key:"ELOPEP-2339",summary:"Identificar tablas necesarias para clustering",status:"Done",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:0,spent:7200},
+{key:"ELOPEP-2337",summary:"Apoyar con reuniones para la estructura",status:"Selected for Development",priority:"Medium",assignee:"Refugio Rangel",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2336",summary:"Definir estructura - Tabla 5",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2334",summary:"Definir estructura - Tabla 4",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2333",summary:"Definir estructura - Tabla 3",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2332",summary:"Definir estructura - Tabla 2",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2330",summary:"Documentación estructura",status:"Selected for Development",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2329",summary:"Validar Estructura",status:"Selected for Development",priority:"Highest",assignee:null,orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2328",summary:"Definir estructura - Tabla 1",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2327",summary:"Identificar tablas necesarias",status:"Selected for Development",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2324",summary:"Ajustes Mockup 1PD",status:"In Progress",priority:"Medium",assignee:"mayte.chi",orig:3600,remaining:3600,spent:0},
+{key:"ELOPEP-2323",summary:"Aprobación Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:0,spent:10200},
+{key:"ELOPEP-2322",summary:"Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:21600,remaining:0,spent:39600},
+],
+"Sprint 2": [],
+"Sprint 3": [],
+"Sprint 4": [],
+};
+
+const SPRINT_NAMES = Object.keys(SPRINTS);
+
+const STATUSES = ["Backlog","Selected for Development","In Progress","Done"];
+const STATUS_COLOR = {Backlog:"backlog",             "Selected for Development":"selected", "In Progress":"progress", Done:"done"};
+const PRIORITY_COLOR = {Highest:"var(--danger)", High:"var(--progress)", Medium:"var(--selected)", Low:"var(--backlog)"};
+
+function hrs(sec){ return Math.round((sec/3600)*10)/10; }
+function fmtH(sec){ const h = hrs(sec); return (h % 1 === 0 ? h.toFixed(0) : h.toFixed(1)) + "h"; }
+function initials(name){
+  if(!name) return "—";
+  return name.split(" ").filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
+}
+
+let state = { search:"", assignee:"", priority:"", view:"board", sprint:"overview" };
+
+function currentData(){
+  if(state.sprint === "overview"){
+    return SPRINT_NAMES.flatMap(n => SPRINTS[n]);
+  }
+  return SPRINTS[state.sprint] || [];
+}
+
+function filtered(){
+  return currentData().filter(t=>{
+    if(state.assignee && (t.assignee||"Sin asignar") !== state.assignee) return false;
+    if(state.priority && t.priority !== state.priority) return false;
+    if(state.search){
+      const q = state.search.toLowerCase();
+      const hay = (t.key+" "+t.summary+" "+(t.assignee||"")).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderStats(){
+  const data = currentData();
+  const total = data.length;
+  const done = data.filter(t=>t.status==="Done").length;
+  const origSum = data.reduce((a,t)=>a+t.orig,0);
+  const spentSum = data.reduce((a,t)=>a+t.spent,0);
+  const remainSum = data.reduce((a,t)=>a+t.remaining,0);
+  const pct = total ? Math.round((done/total)*100) : 0;
+
+  const stats = [
+    {label:"Subtareas", value:total, sub:done+" completadas"},
+    {label:"Avance", value:pct+"%", sub:done+" de "+total},
+    {label:"Estimación total", value:fmtH(origSum), sub:"trabajo original"},
+    {label:"Tiempo registrado", value:fmtH(spentSum), sub:"vs. "+fmtH(origSum)+" estimado"},
+    {label:"Restante", value:fmtH(remainSum), sub:"por completar"},
+  ];
+  document.getElementById("stats").innerHTML = stats.map(s=>
+    `<div class="stat"><p class="label">${s.label}</p><p class="value">${s.value}</p><p class="sub">${s.sub}</p></div>`
+  ).join("");
+}
+
+function renderStatus(){
+  const data = currentData();
+  const total = data.length;
+  const doneH = data.filter(t=>t.status==="Done").reduce((a,t)=>a+t.orig,0);
+  const backlogH = data.filter(t=>t.status==="Backlog").reduce((a,t)=>a+t.orig,0);
+  const origSum = data.reduce((a,t)=>a+t.orig,0);
+  const backlogPct = origSum ? backlogH/origSum : 0;
+  const donePct = origSum ? doneH/origSum : 0;
+
+  let level, label, detail;
+  if(total === 0){
+    level = "warn"; label = "Sin datos";
+    detail = "Este sprint todavía no tiene tareas cargadas.";
+  } else if(backlogPct > 0.35){
+    level = "risk"; label = "En riesgo";
+    detail = "Gran parte del trabajo sigue sin arrancar (" + Math.round(backlogPct*100) + "% en Backlog).";
+  } else if(donePct >= 0.5){
+    level = "ok"; label = "En buen camino";
+    detail = Math.round(donePct*100) + "% del esfuerzo ya está completado.";
+  } else {
+    level = "warn"; label = "En progreso";
+    detail = "Avance moderado, sin señales claras de bloqueo.";
+  }
+
+  document.getElementById("statusRow").innerHTML =
+    `<span class="status-pill ${level}"><span class="dot"></span>${label}</span>
+     <span class="status-detail">${detail}</span>`;
+}
+
+function renderInsight(){
+  const data = currentData();
+  const el = document.getElementById("insight");
+  if(data.length === 0){
+    el.innerHTML = `<span class="tag">Insight</span>Sin tareas todavía para generar un insight.`;
+    return;
+  }
+  const byPerson = {};
+  data.forEach(t=>{
+    const name = t.assignee || "Sin asignar";
+    byPerson[name] = byPerson[name] || {backlog:0,total:0,doneOver:0};
+    byPerson[name].total += t.orig;
+    if(t.status==="Backlog") byPerson[name].backlog += t.orig;
+    if(t.status==="Done" && t.spent > t.orig) byPerson[name].doneOver += (t.spent - t.orig);
+  });
+
+  const names = Object.keys(byPerson);
+  const topBacklog = names.reduce((a,b)=> byPerson[a].backlog > byPerson[b].backlog ? a : b);
+  const overrunPerson = names.find(n=>byPerson[n].doneOver > 0);
+
+  let text = byPerson[topBacklog].backlog > 0
+    ? `<b>${topBacklog}</b> concentra ${fmtH(byPerson[topBacklog].backlog)} sin arrancar (Backlog), el bloque más grande de trabajo pendiente.`
+    : `No hay trabajo pendiente en Backlog — buena señal para el cierre de este periodo.`;
+
+  if(overrunPerson){
+    const over = byPerson[overrunPerson].doneOver;
+    text += ` Además, tareas completadas por <b>${overrunPerson}</b> tomaron ${fmtH(over)} más de lo estimado — vale la pena revisar esas estimaciones para tareas similares.`;
+  }
+
+  el.innerHTML = `<span class="tag">Insight</span>${text}`;
+}
+
+function renderWorkload(){
+  const data = currentData();
+  const people = {};
+  data.forEach(t=>{
+    const name = t.assignee || "Sin asignar";
+    if(!people[name]) people[name] = {Backlog:0,"Selected for Development":0,"In Progress":0,Done:0,total:0};
+    people[name][t.status] += t.orig;
+    people[name].total += t.orig;
+  });
+  const names = Object.keys(people).sort((a,b)=>people[b].total-people[a].total);
+  const max = names.length ? Math.max(...names.map(n=>people[n].total)) : 1;
+
+  document.getElementById("wl-n").textContent = names.length + " personas";
+  document.getElementById("workload").innerHTML = names.length ? names.map(name=>{
+    const p = people[name];
+    const width = (p.total/max)*100;
+    const segs = STATUSES.map(s=>{
+      if(!p[s]) return "";
+      const w = (p[s]/p.total)*100;
+      return `<div class="wl-seg" style="width:${w}%;background:var(--${STATUS_COLOR[s]})" title="${s}: ${fmtH(p[s])}"></div>`;
+    }).join("");
+    return `<div class="wl-row">
+      <div class="wl-name">${name}</div>
+      <div class="wl-bar" style="width:100%"><div style="width:${width}%;display:flex;height:100%;">${segs}</div></div>
+      <div class="wl-total">${fmtH(p.total)}</div>
+    </div>`;
+  }).join("") : `<div class="empty">Sin datos</div>`;
+}
+
+function cardHtml(t){
+  const av = t.assignee ? `<div class="avatar">${initials(t.assignee)}</div>` : `<div class="avatar unassigned">?</div>`;
+  return `<div class="card" style="border-left-color:var(--${STATUS_COLOR[t.status]})">
+    <div class="key">${t.key}</div>
+    <div class="summary">${t.summary}</div>
+    <div class="card-meta">
+      ${av}
+      <div class="meta-right">
+        <span class="prio-dot" style="background:${PRIORITY_COLOR[t.priority]}" title="${t.priority}"></span>
+        <span class="time-chip">${t.spent>0 ? fmtH(t.spent)+" / " : ""}${fmtH(t.orig)}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBoard(){
+  const data = filtered();
+  document.getElementById("board").innerHTML = STATUSES.map(s=>{
+    const items = data.filter(t=>t.status===s);
+    return `<div class="col">
+      <div class="col-head">
+        <span class="name" style="color:var(--${STATUS_COLOR[s]})">${s}</span>
+        <span class="count">${items.length}</span>
+      </div>
+      <div class="col-body">
+        ${items.length ? items.map(cardHtml).join("") : `<div class="empty">Sin tareas</div>`}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderPeople(){
+  const data = filtered();
+  const names = [...new Set(data.map(t=>t.assignee||"Sin asignar"))]
+    .sort((a,b)=> (data.filter(t=>(t.assignee||"Sin asignar")===b).reduce((s,t)=>s+t.orig,0)) - (data.filter(t=>(t.assignee||"Sin asignar")===a).reduce((s,t)=>s+t.orig,0)));
+
+  document.getElementById("people").innerHTML = names.map(name=>{
+    const items = data.filter(t=>(t.assignee||"Sin asignar")===name);
+    const av = name==="Sin asignar" ? `<div class="avatar unassigned">?</div>` : `<div class="avatar">${initials(name)}</div>`;
+    return `<div class="person">
+      <div class="person-head">${av}<span class="pname">${name}</span><span class="pcount">${items.length} tareas</span></div>
+      <div class="person-body">${items.map(cardHtml).join("")}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderAll(){
+  renderBoard();
+  renderPeople();
+  document.getElementById("footerLine").textContent =
+    "ELOPEP · " + (state.sprint==="overview" ? "Todos los sprints" : state.sprint) + " · " + filtered().length + " subtareas";
+}
+
+function renderSprintGrid(){
+  document.getElementById("sprintGrid").innerHTML = SPRINT_NAMES.map(name=>{
+    const data = SPRINTS[name];
+    const total = data.length;
+    const origSum = data.reduce((a,t)=>a+t.orig,0);
+    const doneH = data.filter(t=>t.status==="Done").reduce((a,t)=>a+t.orig,0);
+    const pct = origSum ? Math.round((doneH/origSum)*100) : 0;
+    const empty = total === 0;
+    return `<div class="sprint-card ${empty?'empty-sprint':''}" data-sprint="${name}">
+      <p class="sname">${name}</p>
+      <div class="sbar"><div class="sbar-fill" style="width:${pct}%"></div></div>
+      <div class="smeta"><span>${empty ? "Sin datos" : pct+"% completado"}</span><span>${total} tareas</span></div>
+    </div>`;
+  }).join("");
+
+  document.querySelectorAll(".sprint-card").forEach(card=>{
+    card.addEventListener("click", ()=>{
+      selectSprint(card.dataset.sprint);
+    });
+  });
+}
+
+function renderTabs(){
+  const tabs = ["overview", ...SPRINT_NAMES];
+  document.getElementById("tabs").innerHTML = tabs.map(t=>{
+    const label = t==="overview" ? "Overview" : t;
+    return `<button class="tab ${state.sprint===t?'active':''}" data-tab="${t}">${label}</button>`;
+  }).join("");
+  document.querySelectorAll(".tab").forEach(btn=>{
+    btn.addEventListener("click", ()=> selectSprint(btn.dataset.tab));
+  });
+}
+
+function selectSprint(name){
+  state.sprint = name;
+  state.search = ""; state.assignee = ""; state.priority = "";
+  const searchInput = document.getElementById("search");
+  if(searchInput) searchInput.value = "";
+
+  document.getElementById("pageTitle").textContent = name === "overview" ? "Overview" : "Sprint tracker";
+  document.getElementById("overviewView").style.display = name === "overview" ? "block" : "none";
+  document.getElementById("sprintView").style.display = name === "overview" ? "none" : "block";
+
+  renderTabs();
+  if(name === "overview"){
+    renderSprintGrid();
+  } else {
+    refreshFilters();
+    renderStats();
+    renderStatus();
+    renderInsight();
+    renderWorkload();
+    renderAll();
+  }
+}
+
+function refreshFilters(){
+  const data = currentData();
+  const assignees = [...new Set(data.map(t=>t.assignee||"Sin asignar"))].sort();
+  const selA = document.getElementById("filterAssignee");
+  selA.innerHTML = `<option value="">Toda persona</option>` + assignees.map(a=>`<option value="${a}">${a}</option>`).join("");
+
+  const priorities = [...new Set(data.map(t=>t.priority))];
+  const order = {Highest:0,High:1,Medium:2,Low:3};
+  priorities.sort((a,b)=>order[a]-order[b]);
+  const selP = document.getElementById("filterPriority");
+  selP.innerHTML = `<option value="">Toda prioridad</option>` + priorities.map(p=>`<option value="${p}">${p}</option>`).join("");
+}
+
+function setup(){
+  document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleDateString("es-MX", {year:"numeric",month:"short",day:"numeric"});
+
+  document.getElementById("search").addEventListener("input", e=>{ state.search = e.target.value; renderAll(); });
+  document.getElementById("filterAssignee").addEventListener("change", e=>{ state.assignee = e.target.value; renderAll(); });
+  document.getElementById("filterPriority").addEventListener("change", e=>{ state.priority = e.target.value; renderAll(); });
+
+  const btnBoard = document.getElementById("btnBoard");
+  const btnPeople = document.getElementById("btnPeople");
+  btnBoard.addEventListener("click", ()=>{
+    state.view = "board";
+    btnBoard.classList.add("active"); btnPeople.classList.remove("active");
+    document.getElementById("board").style.display = "grid";
+    document.getElementById("people").style.display = "none";
+  });
+  btnPeople.addEventListener("click", ()=>{
+    state.view = "people";
+    btnPeople.classList.add("active"); btnBoard.classList.remove("active");
+    document.getElementById("board").style.display = "none";
+    document.getElementById("people").style.display = "flex";
+  });
+
+  selectSprint("overview");
+}
+
+setup();
+</script>
+</body>
+</html>
