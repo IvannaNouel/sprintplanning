@@ -377,7 +377,7 @@
 
 <script>
 const SPRINT_SOURCES = {
-"Sprint 1": "https://docs.google.com/spreadsheets/d/1-82AVva1I9lzWXqG1PKRYbBK64AiMzWD-9QJOefV_ZU/gviz/tq?tqx=out:csv&gid=71346236",
+"Sprint 1": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSWWR5OWlAojMY4J327SiSdUnT9G9GRFFY0F5cGxtB7hIMEBCO27ocWqTWR-hqfntJnbMtfwgwTZLSn/pub?gid=71346236&single=true&output=csv",
 "Sprint 2": null,
 "Sprint 3": null,
 "Sprint 4": null,
@@ -464,58 +464,83 @@ function rowsToTasksFromCols(cols, rows){
     }));
 }
 
-function fetchSprint(name, url){
+async function tryFetchText(url){
+  const res = await fetch(url, {cache:"no-store"});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const text = await res.text();
+  if(!text || text.trim().length === 0) throw new Error("Respuesta vacía");
+  return text;
+}
+
+function gvizFallback(name, url){
   return new Promise(resolve=>{
     const cbName = "gvizCb_" + name.replace(/[^a-zA-Z0-9]/g,"") + "_" + Date.now();
     const sep = url.includes("?") ? "&" : "?";
     const fullUrl = url + sep + "tqx=out:json;responseHandler=" + cbName;
     let settled = false;
+    const timeout = setTimeout(()=>{ finish(false, "Tiempo de espera agotado"); }, 10000);
 
-    const timeout = setTimeout(()=>{
-      if(settled) return;
-      settled = true;
-      fetchErrors[name] = "Tiempo de espera agotado";
-      cleanup();
-      resolve(false);
-    }, 12000);
-
-    function cleanup(){
-      delete window[cbName];
-      if(script.parentNode) script.parentNode.removeChild(script);
-      clearTimeout(timeout);
+    function cleanup(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timeout); }
+    function finish(ok, errMsg, tasks){
+      if(settled) return; settled = true; cleanup();
+      if(ok){ resolve(tasks); } else { resolve(null); }
     }
-
     window[cbName] = function(response){
-      if(settled) return;
-      settled = true;
       try{
-        if(response.status === "error"){
-          throw new Error((response.errors && response.errors[0] && response.errors[0].detailed_message) || "La hoja devolvió un error");
-        }
+        if(response.status === "error") throw new Error("gviz error");
         const cols = response.table.cols.map(c=> c.label || c.id);
         const rows = response.table.rows.map(r=> r.c.map(c=> c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : ""));
-        SPRINTS[name] = rowsToTasksFromCols(cols, rows);
-        delete fetchErrors[name];
-        cleanup();
-        resolve(true);
-      }catch(err){
-        fetchErrors[name] = err.message || "Error al leer la hoja";
-        cleanup();
-        resolve(false);
-      }
+        finish(true, null, rowsToTasksFromCols(cols, rows));
+      }catch(e){ finish(false, e.message); }
     };
-
     const script = document.createElement("script");
     script.src = fullUrl;
-    script.onerror = ()=>{
-      if(settled) return;
-      settled = true;
-      fetchErrors[name] = "No se pudo cargar la hoja (revisa que esté compartida)";
-      cleanup();
-      resolve(false);
-    };
+    script.onerror = ()=> finish(false, "script error");
     document.head.appendChild(script);
   });
+}
+
+async function fetchSprint(name, url){
+  const proxies = [
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url),
+  ];
+  let lastErr = null;
+
+  // Strategy 1: direct fetch (works if Google ever serves CORS headers)
+  try{
+    const text = await tryFetchText(url);
+    SPRINTS[name] = rowsToTasks(parseCSV(text));
+    delete fetchErrors[name];
+    return true;
+  }catch(err){ lastErr = err; }
+
+  // Strategy 2 & 3: fetch through public CORS relays
+  for(const proxyUrl of proxies){
+    try{
+      const text = await tryFetchText(proxyUrl);
+      SPRINTS[name] = rowsToTasks(parseCSV(text));
+      delete fetchErrors[name];
+      return true;
+    }catch(err){ lastErr = err; }
+  }
+
+  // Strategy 4: gviz JSONP (bypasses CORS via <script> tag), only if URL looks like a sheet link
+  try{
+    const base = url.split("/pub")[0].split("/gviz")[0];
+    const gid = (url.match(/gid=(\d+)/) || [])[1];
+    const gvizAttempt = base + "/gviz/tq?tqx=out:json" + (gid ? "&gid="+gid : "");
+    const tasks = await gvizFallback(name, gvizAttempt);
+    if(tasks){
+      SPRINTS[name] = tasks;
+      delete fetchErrors[name];
+      return true;
+    }
+  }catch(err){ lastErr = err; }
+
+  console.error("Error cargando "+name, lastErr);
+  fetchErrors[name] = (lastErr && lastErr.message) || "No se pudo cargar la hoja";
+  return false;
 }
 
 async function loadAllSprints(){
