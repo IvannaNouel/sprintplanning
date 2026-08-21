@@ -67,6 +67,19 @@
     color:var(--ink-faint);
     text-align:right;
   }
+  .updated-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;}
+  .refresh-btn{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    padding:.35rem .7rem;
+    border:1px solid var(--line-strong);
+    background:var(--paper-raised);
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .refresh-btn:hover{color:var(--accent);border-color:var(--accent);}
 
   .stats{
     display:grid;
@@ -311,7 +324,10 @@
       <p class="eyebrow">ELOPEP · Pepsi</p>
       <h1 id="pageTitle">Sprint tracker</h1>
     </div>
-    <div class="updated" id="updated"></div>
+    <div class="updated-wrap">
+      <div class="updated" id="updated"></div>
+      <button id="refreshBtn" class="refresh-btn">Refrescar</button>
+    </div>
   </header>
 
   <div class="tabs" id="tabs"></div>
@@ -360,31 +376,154 @@
 </div>
 
 <script>
-const SPRINTS = {
-"Sprint 1": [
-{key:"ELOPEP-2344",summary:"Validar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:3600,remaining:3600,spent:0},
-{key:"ELOPEP-2342",summary:"Documentar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:7200,spent:0},
-{key:"ELOPEP-2340",summary:"Definir estructura de las tablas",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:10800,remaining:10800,spent:0},
-{key:"ELOPEP-2339",summary:"Identificar tablas necesarias para clustering",status:"Done",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:0,spent:7200},
-{key:"ELOPEP-2337",summary:"Apoyar con reuniones para la estructura",status:"Selected for Development",priority:"Medium",assignee:"Refugio Rangel",orig:7200,remaining:7200,spent:0},
-{key:"ELOPEP-2336",summary:"Definir estructura - Tabla 5",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2334",summary:"Definir estructura - Tabla 4",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2333",summary:"Definir estructura - Tabla 3",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2332",summary:"Definir estructura - Tabla 2",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2330",summary:"Documentación estructura",status:"Selected for Development",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:7200,spent:0},
-{key:"ELOPEP-2329",summary:"Validar Estructura",status:"Selected for Development",priority:"Highest",assignee:null,orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2328",summary:"Definir estructura - Tabla 1",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2327",summary:"Identificar tablas necesarias",status:"Selected for Development",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
-{key:"ELOPEP-2324",summary:"Ajustes Mockup 1PD",status:"In Progress",priority:"Medium",assignee:"mayte.chi",orig:3600,remaining:3600,spent:0},
-{key:"ELOPEP-2323",summary:"Aprobación Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:0,spent:10200},
-{key:"ELOPEP-2322",summary:"Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:21600,remaining:0,spent:39600},
-],
-"Sprint 2": [],
-"Sprint 3": [],
-"Sprint 4": [],
+const SPRINT_SOURCES = {
+"Sprint 1": "https://docs.google.com/spreadsheets/d/1-82AVva1I9lzWXqG1PKRYbBK64AiMzWD-9QJOefV_ZU/gviz/tq?tqx=out:csv&gid=71346236",
+"Sprint 2": null,
+"Sprint 3": null,
+"Sprint 4": null,
 };
 
-const SPRINT_NAMES = Object.keys(SPRINTS);
+const SPRINT_NAMES = Object.keys(SPRINT_SOURCES);
+const SPRINTS = {};
+SPRINT_NAMES.forEach(n => SPRINTS[n] = []);
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ",") { row.push(field); field = ""; }
+      else if(c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else if(c === "\r") { /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r.length===1 && r[0] !== ""));
+}
+
+function rowsToTasks(rows){
+  if(!rows.length) return [];
+  const headers = rows[0].map(h=>h.trim());
+  const idx = {
+    key: headers.indexOf("Issue key"),
+    summary: headers.indexOf("Summary"),
+    status: headers.indexOf("Status"),
+    priority: headers.indexOf("Priority"),
+    assignee: headers.indexOf("Assignee"),
+    orig: headers.indexOf("Original estimate"),
+    remaining: headers.indexOf("Remaining Estimate"),
+    spent: headers.indexOf("Time Spent"),
+  };
+  const num = v => { const n = parseInt(v,10); return isNaN(n) ? 0 : n; };
+  return rows.slice(1)
+    .filter(r => r[idx.key])
+    .map(r => ({
+      key: r[idx.key] || "",
+      summary: r[idx.summary] || "",
+      status: (r[idx.status] || "").trim(),
+      priority: (r[idx.priority] || "").trim() || "Medium",
+      assignee: (r[idx.assignee] || "").trim() || null,
+      orig: num(r[idx.orig]),
+      remaining: num(r[idx.remaining]),
+      spent: num(r[idx.spent]),
+    }));
+}
+
+let fetchErrors = {};
+
+function rowsToTasksFromCols(cols, rows){
+  const idx = {
+    key: cols.indexOf("Issue key"),
+    summary: cols.indexOf("Summary"),
+    status: cols.indexOf("Status"),
+    priority: cols.indexOf("Priority"),
+    assignee: cols.indexOf("Assignee"),
+    orig: cols.indexOf("Original estimate"),
+    remaining: cols.indexOf("Remaining Estimate"),
+    spent: cols.indexOf("Time Spent"),
+  };
+  const num = v => { const n = parseInt(v,10); return isNaN(n) ? 0 : n; };
+  return rows
+    .filter(r => r[idx.key])
+    .map(r => ({
+      key: String(r[idx.key] || ""),
+      summary: String(r[idx.summary] || ""),
+      status: String(r[idx.status] || "").trim(),
+      priority: String(r[idx.priority] || "").trim() || "Medium",
+      assignee: (r[idx.assignee] ? String(r[idx.assignee]).trim() : "") || null,
+      orig: num(r[idx.orig]),
+      remaining: num(r[idx.remaining]),
+      spent: num(r[idx.spent]),
+    }));
+}
+
+function fetchSprint(name, url){
+  return new Promise(resolve=>{
+    const cbName = "gvizCb_" + name.replace(/[^a-zA-Z0-9]/g,"") + "_" + Date.now();
+    const sep = url.includes("?") ? "&" : "?";
+    const fullUrl = url + sep + "tqx=out:json;responseHandler=" + cbName;
+    let settled = false;
+
+    const timeout = setTimeout(()=>{
+      if(settled) return;
+      settled = true;
+      fetchErrors[name] = "Tiempo de espera agotado";
+      cleanup();
+      resolve(false);
+    }, 12000);
+
+    function cleanup(){
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timeout);
+    }
+
+    window[cbName] = function(response){
+      if(settled) return;
+      settled = true;
+      try{
+        if(response.status === "error"){
+          throw new Error((response.errors && response.errors[0] && response.errors[0].detailed_message) || "La hoja devolvió un error");
+        }
+        const cols = response.table.cols.map(c=> c.label || c.id);
+        const rows = response.table.rows.map(r=> r.c.map(c=> c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : ""));
+        SPRINTS[name] = rowsToTasksFromCols(cols, rows);
+        delete fetchErrors[name];
+        cleanup();
+        resolve(true);
+      }catch(err){
+        fetchErrors[name] = err.message || "Error al leer la hoja";
+        cleanup();
+        resolve(false);
+      }
+    };
+
+    const script = document.createElement("script");
+    script.src = fullUrl;
+    script.onerror = ()=>{
+      if(settled) return;
+      settled = true;
+      fetchErrors[name] = "No se pudo cargar la hoja (revisa que esté compartida)";
+      cleanup();
+      resolve(false);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function loadAllSprints(){
+  const jobs = SPRINT_NAMES
+    .filter(n => SPRINT_SOURCES[n])
+    .map(n => fetchSprint(n, SPRINT_SOURCES[n]));
+  await Promise.all(jobs);
+}
 
 const STATUSES = ["Backlog","Selected for Development","In Progress","Done"];
 const STATUS_COLOR = {Backlog:"backlog",             "Selected for Development":"selected", "In Progress":"progress", Done:"done"};
@@ -450,7 +589,10 @@ function renderStatus(){
   const donePct = origSum ? doneH/origSum : 0;
 
   let level, label, detail;
-  if(total === 0){
+  if(fetchErrors[state.sprint]){
+    level = "risk"; label = "Error de conexión";
+    detail = "No se pudo cargar la hoja (" + fetchErrors[state.sprint] + "). Verifica que siga publicada y compartida.";
+  } else if(total === 0){
     level = "warn"; label = "Sin datos";
     detail = "Este sprint todavía no tiene tareas cargadas.";
   } else if(backlogPct > 0.35){
@@ -653,7 +795,7 @@ function refreshFilters(){
 }
 
 function setup(){
-  document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleDateString("es-MX", {year:"numeric",month:"short",day:"numeric"});
+  document.getElementById("updated").textContent = "Cargando…";
 
   document.getElementById("search").addEventListener("input", e=>{ state.search = e.target.value; renderAll(); });
   document.getElementById("filterAssignee").addEventListener("change", e=>{ state.assignee = e.target.value; renderAll(); });
@@ -674,7 +816,17 @@ function setup(){
     document.getElementById("people").style.display = "flex";
   });
 
-  selectSprint("overview");
+  document.getElementById("refreshBtn").addEventListener("click", async ()=>{
+    document.getElementById("updated").textContent = "Actualizando…";
+    await loadAllSprints();
+    document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
+    selectSprint(state.sprint);
+  });
+
+  loadAllSprints().then(()=>{
+    document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
+    selectSprint("overview");
+  });
 }
 
 setup();
