@@ -25,6 +25,8 @@
     --done-bg:#DEEBE3;
     --danger:#B23A2E;
     --danger-bg:#F5E1DE;
+    --validating:#6E4A8A;
+    --validating-bg:#E7E0EE;
     font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
   *{box-sizing:border-box;}
@@ -253,7 +255,7 @@
 
   .board{
     display:grid;
-    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
     gap:14px;
   }
   .col{background:var(--paper-raised);border:1px solid var(--line);min-height:60px;}
@@ -305,6 +307,26 @@
 
   .empty{padding:1.2rem;text-align:center;font-size:12px;color:var(--ink-faint);}
 
+  .project-switcher{
+    display:flex;
+    gap:.5rem;
+    margin-bottom:1.4rem;
+    flex-wrap:wrap;
+  }
+  .project-btn{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    padding:.6rem 1.1rem;
+    border:1px solid var(--ink);
+    background:var(--paper-raised);
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .project-btn.active{background:var(--ink);color:var(--paper);}
+  .project-btn:hover:not(.active){background:var(--accent-soft);color:var(--ink);}
+
   footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:11px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;}
 
   @media (max-width:820px){
@@ -319,9 +341,11 @@
 <body>
 <div class="wrap">
 
+  <div class="project-switcher" id="projectSwitcher"></div>
+
   <header>
     <div>
-      <p class="eyebrow">ELOPEP · Pepsi</p>
+      <p class="eyebrow" id="eyebrow">Sprint Planning</p>
       <h1 id="pageTitle">Sprint tracker</h1>
     </div>
     <div class="updated-wrap">
@@ -346,12 +370,7 @@
     <section class="block">
       <p class="block-title">Carga por persona <span class="n" id="wl-n"></span></p>
       <div class="workload" id="workload"></div>
-      <div class="legend">
-        <span><i style="background:var(--backlog)"></i>Backlog</span>
-        <span><i style="background:var(--selected)"></i>Selected for development</span>
-        <span><i style="background:var(--progress)"></i>In progress</span>
-        <span><i style="background:var(--done)"></i>Done</span>
-      </div>
+      <div class="legend" id="legend"></div>
     </section>
 
     <section class="block">
@@ -376,16 +395,24 @@
 </div>
 
 <script>
-const SPRINT_SOURCES = {
-"Sprint 1": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSWWR5OWlAojMY4J327SiSdUnT9G9GRFFY0F5cGxtB7hIMEBCO27ocWqTWR-hqfntJnbMtfwgwTZLSn/pub?gid=71346236&single=true&output=csv",
-"Sprint 2": null,
-"Sprint 3": null,
-"Sprint 4": null,
-};
+const SOURCE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSc8DVLQtQU0h8CYMdwilJSU7USRH8uC4zjSqOFsKS3gHz56bwckonVssEwzKaW8NVUgDeAVe2kJQyv/pub?gid=1088099827&single=true&output=csv";
+const SHEET_ID = "1nbeh-yLcqc7h02G8eh20Kq4rI8Pv6xyLeaeZcqOJsGs";
+const SHEET_GID = "1088099827";
 
-const SPRINT_NAMES = Object.keys(SPRINT_SOURCES);
-const SPRINTS = {};
-SPRINT_NAMES.forEach(n => SPRINTS[n] = []);
+const STATUSES = ["Backlog","Selected for Development","In Progress","En validación","Done"];
+const STATUS_COLOR = {
+  "Backlog":"backlog",
+  "Selected for Development":"selected",
+  "In Progress":"progress",
+  "En validación":"validating",
+  "Done":"done"
+};
+const PRIORITY_COLOR = {Highest:"var(--danger)", High:"var(--progress)", Medium:"var(--selected)", Low:"var(--backlog)"};
+
+let PROJECT_NAMES = [];
+let SPRINT_NAMES = [];
+let SPRINTS = {};
+let loadError = null;
 
 function parseCSV(text){
   const rows = [];
@@ -408,151 +435,152 @@ function parseCSV(text){
   return rows.filter(r => r.length > 1 || (r.length===1 && r[0] !== ""));
 }
 
-function rowsToTasks(rows){
-  if(!rows.length) return [];
+function parseDuration(str){
+  if(!str) return 0;
+  str = String(str).trim();
+  if(!str) return 0;
+  let total = 0;
+  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/i);
+  const mMatch = str.match(/(\d+)\s*m(?!s)/i);
+  if(hMatch) total += parseFloat(hMatch[1]) * 3600;
+  if(mMatch) total += parseInt(mMatch[1],10) * 60;
+  if(!hMatch && !mMatch){
+    const n = parseInt(str,10);
+    if(!isNaN(n)) total = n;
+  }
+  return Math.round(total);
+}
+
+function parseLabels(labelStr){
+  const parts = (labelStr||"").split(",").map(s=>s.trim()).filter(Boolean);
+  let project = null, sprint = null;
+  parts.forEach(p=>{
+    const m = p.match(/^sprint[\s-]?(\d+)$/i);
+    if(m){ sprint = "Sprint " + m[1]; }
+    else if(!project){ project = p; }
+  });
+  return { project: project || "Sin proyecto", sprint: sprint || "Sin sprint" };
+}
+
+function rowsToDataset(rows){
+  const dataset = {};
+  if(!rows.length) return dataset;
   const headers = rows[0].map(h=>h.trim());
   const idx = {
     key: headers.indexOf("Issue key"),
     summary: headers.indexOf("Summary"),
     status: headers.indexOf("Status"),
-    priority: headers.indexOf("Priority"),
     assignee: headers.indexOf("Assignee"),
-    orig: headers.indexOf("Original estimate"),
+    priority: headers.indexOf("Priority"),
+    labels: headers.indexOf("Labels"),
+    orig: headers.indexOf("Original Estimate") >= 0 ? headers.indexOf("Original Estimate") : headers.indexOf("Original estimate"),
     remaining: headers.indexOf("Remaining Estimate"),
     spent: headers.indexOf("Time Spent"),
   };
-  const num = v => { const n = parseInt(v,10); return isNaN(n) ? 0 : n; };
-  return rows.slice(1)
-    .filter(r => r[idx.key])
-    .map(r => ({
+  rows.slice(1).filter(r=>r[idx.key]).forEach(r=>{
+    const { project, sprint } = parseLabels(r[idx.labels]);
+    if(!dataset[project]) dataset[project] = {};
+    if(!dataset[project][sprint]) dataset[project][sprint] = [];
+    dataset[project][sprint].push({
       key: r[idx.key] || "",
       summary: r[idx.summary] || "",
       status: (r[idx.status] || "").trim(),
       priority: (r[idx.priority] || "").trim() || "Medium",
       assignee: (r[idx.assignee] || "").trim() || null,
-      orig: num(r[idx.orig]),
-      remaining: num(r[idx.remaining]),
-      spent: num(r[idx.spent]),
-    }));
+      orig: parseDuration(r[idx.orig]),
+      remaining: parseDuration(r[idx.remaining]),
+      spent: parseDuration(r[idx.spent]),
+    });
+  });
+  return dataset;
 }
 
-let fetchErrors = {};
-
-function rowsToTasksFromCols(cols, rows){
-  const idx = {
-    key: cols.indexOf("Issue key"),
-    summary: cols.indexOf("Summary"),
-    status: cols.indexOf("Status"),
-    priority: cols.indexOf("Priority"),
-    assignee: cols.indexOf("Assignee"),
-    orig: cols.indexOf("Original estimate"),
-    remaining: cols.indexOf("Remaining Estimate"),
-    spent: cols.indexOf("Time Spent"),
-  };
-  const num = v => { const n = parseInt(v,10); return isNaN(n) ? 0 : n; };
-  return rows
-    .filter(r => r[idx.key])
-    .map(r => ({
-      key: String(r[idx.key] || ""),
-      summary: String(r[idx.summary] || ""),
-      status: String(r[idx.status] || "").trim(),
-      priority: String(r[idx.priority] || "").trim() || "Medium",
-      assignee: (r[idx.assignee] ? String(r[idx.assignee]).trim() : "") || null,
-      orig: num(r[idx.orig]),
-      remaining: num(r[idx.remaining]),
-      spent: num(r[idx.spent]),
-    }));
+async function tryFetchText(url, timeoutMs){
+  const controller = new AbortController();
+  const timer = setTimeout(()=> controller.abort(), timeoutMs || 8000);
+  try{
+    const res = await fetch(url, {cache:"no-store", signal: controller.signal});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text = await res.text();
+    if(!text || text.trim().length === 0) throw new Error("Respuesta vacía");
+    return text;
+  }finally{
+    clearTimeout(timer);
+  }
 }
 
-async function tryFetchText(url){
-  const res = await fetch(url, {cache:"no-store"});
-  if(!res.ok) throw new Error("HTTP "+res.status);
-  const text = await res.text();
-  if(!text || text.trim().length === 0) throw new Error("Respuesta vacía");
-  return text;
-}
-
-function gvizFallback(name, url){
+function gvizFallback(url){
   return new Promise(resolve=>{
-    const cbName = "gvizCb_" + name.replace(/[^a-zA-Z0-9]/g,"") + "_" + Date.now();
+    const cbName = "gvizCb_" + Date.now();
     const sep = url.includes("?") ? "&" : "?";
     const fullUrl = url + sep + "tqx=out:json;responseHandler=" + cbName;
     let settled = false;
-    const timeout = setTimeout(()=>{ finish(false, "Tiempo de espera agotado"); }, 10000);
+    const timeout = setTimeout(()=>{ finish(null); }, 10000);
 
     function cleanup(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timeout); }
-    function finish(ok, errMsg, tasks){
-      if(settled) return; settled = true; cleanup();
-      if(ok){ resolve(tasks); } else { resolve(null); }
-    }
+    function finish(text){ if(settled) return; settled = true; cleanup(); resolve(text); }
+
     window[cbName] = function(response){
       try{
         if(response.status === "error") throw new Error("gviz error");
         const cols = response.table.cols.map(c=> c.label || c.id);
-        const rows = response.table.rows.map(r=> r.c.map(c=> c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : ""));
-        finish(true, null, rowsToTasksFromCols(cols, rows));
-      }catch(e){ finish(false, e.message); }
+        const csvLines = [cols.join(",")];
+        response.table.rows.forEach(r=>{
+          const vals = r.c.map(c=> c ? String(c.f !== undefined && c.f !== null ? c.f : c.v).replace(/"/g,'""') : "");
+          csvLines.push(vals.map(v => '"'+v+'"').join(","));
+        });
+        finish(csvLines.join("\n"));
+      }catch(e){ finish(null); }
     };
     const script = document.createElement("script");
     script.src = fullUrl;
-    script.onerror = ()=> finish(false, "script error");
+    script.onerror = ()=> finish(null);
     document.head.appendChild(script);
   });
 }
 
-async function fetchSprint(name, url){
-  const proxies = [
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
-    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url),
+async function loadData(){
+  const gvizCsvUrl = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&gid=" + SHEET_GID;
+  const candidates = [
+    SOURCE_URL,
+    gvizCsvUrl,
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(SOURCE_URL),
+    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(SOURCE_URL),
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(gvizCsvUrl),
   ];
   let lastErr = null;
+  let text = null;
 
-  // Strategy 1: direct fetch (works if Google ever serves CORS headers)
-  try{
-    const text = await tryFetchText(url);
-    SPRINTS[name] = rowsToTasks(parseCSV(text));
-    delete fetchErrors[name];
-    return true;
-  }catch(err){ lastErr = err; }
+  for(const url of candidates){
+    try{ text = await tryFetchText(url); if(text) break; }
+    catch(err){ lastErr = err; }
+  }
 
-  // Strategy 2 & 3: fetch through public CORS relays
-  for(const proxyUrl of proxies){
+  if(!text){
     try{
-      const text = await tryFetchText(proxyUrl);
-      SPRINTS[name] = rowsToTasks(parseCSV(text));
-      delete fetchErrors[name];
-      return true;
+      const gvizJsonUrl = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json&gid=" + SHEET_GID;
+      text = await gvizFallback(gvizJsonUrl);
     }catch(err){ lastErr = err; }
   }
 
-  // Strategy 4: gviz JSONP (bypasses CORS via <script> tag), only if URL looks like a sheet link
-  try{
-    const base = url.split("/pub")[0].split("/gviz")[0];
-    const gid = (url.match(/gid=(\d+)/) || [])[1];
-    const gvizAttempt = base + "/gviz/tq?tqx=out:json" + (gid ? "&gid="+gid : "");
-    const tasks = await gvizFallback(name, gvizAttempt);
-    if(tasks){
-      SPRINTS[name] = tasks;
-      delete fetchErrors[name];
-      return true;
-    }
-  }catch(err){ lastErr = err; }
+  if(!text){
+    loadError = (lastErr && lastErr.message) || "No se pudo cargar la hoja";
+    return false;
+  }
 
-  console.error("Error cargando "+name, lastErr);
-  fetchErrors[name] = (lastErr && lastErr.message) || "No se pudo cargar la hoja";
-  return false;
+  const dataset = rowsToDataset(parseCSV(text));
+  SPRINTS = dataset;
+  PROJECT_NAMES = Object.keys(dataset);
+  const sprintSet = new Set();
+  PROJECT_NAMES.forEach(p => Object.keys(dataset[p]).forEach(s => sprintSet.add(s)));
+  SPRINT_NAMES = [...sprintSet].sort((a,b)=>{
+    const na = parseInt((a.match(/\d+/)||[999])[0],10);
+    const nb = parseInt((b.match(/\d+/)||[999])[0],10);
+    return na - nb;
+  });
+  loadError = null;
+  return true;
 }
-
-async function loadAllSprints(){
-  const jobs = SPRINT_NAMES
-    .filter(n => SPRINT_SOURCES[n])
-    .map(n => fetchSprint(n, SPRINT_SOURCES[n]));
-  await Promise.all(jobs);
-}
-
-const STATUSES = ["Backlog","Selected for Development","In Progress","Done"];
-const STATUS_COLOR = {Backlog:"backlog",             "Selected for Development":"selected", "In Progress":"progress", Done:"done"};
-const PRIORITY_COLOR = {Highest:"var(--danger)", High:"var(--progress)", Medium:"var(--selected)", Low:"var(--backlog)"};
 
 function hrs(sec){ return Math.round((sec/3600)*10)/10; }
 function fmtH(sec){ const h = hrs(sec); return (h % 1 === 0 ? h.toFixed(0) : h.toFixed(1)) + "h"; }
@@ -561,13 +589,18 @@ function initials(name){
   return name.split(" ").filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
 }
 
-let state = { search:"", assignee:"", priority:"", view:"board", sprint:"overview" };
+let state = { search:"", assignee:"", priority:"", view:"board", sprint:"overview", project: null };
+
+function projectLabel(p){
+  return "Sprint Planning - Dashboard " + p;
+}
 
 function currentData(){
+  const proj = SPRINTS[state.project] || {};
   if(state.sprint === "overview"){
-    return SPRINT_NAMES.flatMap(n => SPRINTS[n]);
+    return SPRINT_NAMES.flatMap(n => proj[n] || []);
   }
-  return SPRINTS[state.sprint] || [];
+  return proj[state.sprint] || [];
 }
 
 function filtered(){
@@ -614,9 +647,9 @@ function renderStatus(){
   const donePct = origSum ? doneH/origSum : 0;
 
   let level, label, detail;
-  if(fetchErrors[state.sprint]){
+  if(loadError){
     level = "risk"; label = "Error de conexión";
-    detail = "No se pudo cargar la hoja (" + fetchErrors[state.sprint] + "). Verifica que siga publicada y compartida.";
+    detail = "No se pudo cargar la hoja (" + loadError + "). Verifica que siga publicada y compartida.";
   } else if(total === 0){
     level = "warn"; label = "Sin datos";
     detail = "Este sprint todavía no tiene tareas cargadas.";
@@ -673,8 +706,9 @@ function renderWorkload(){
   const people = {};
   data.forEach(t=>{
     const name = t.assignee || "Sin asignar";
-    if(!people[name]) people[name] = {Backlog:0,"Selected for Development":0,"In Progress":0,Done:0,total:0};
-    people[name][t.status] += t.orig;
+    if(!people[name]) people[name] = {total:0};
+    STATUSES.forEach(s=>{ if(people[name][s] === undefined) people[name][s] = 0; });
+    people[name][t.status] = (people[name][t.status]||0) + t.orig;
     people[name].total += t.orig;
   });
   const names = Object.keys(people).sort((a,b)=>people[b].total-people[a].total);
@@ -699,13 +733,13 @@ function renderWorkload(){
 
 function cardHtml(t){
   const av = t.assignee ? `<div class="avatar">${initials(t.assignee)}</div>` : `<div class="avatar unassigned">?</div>`;
-  return `<div class="card" style="border-left-color:var(--${STATUS_COLOR[t.status]})">
+  return `<div class="card" style="border-left-color:var(--${STATUS_COLOR[t.status] || 'line-strong'})">
     <div class="key">${t.key}</div>
     <div class="summary">${t.summary}</div>
     <div class="card-meta">
       ${av}
       <div class="meta-right">
-        <span class="prio-dot" style="background:${PRIORITY_COLOR[t.priority]}" title="${t.priority}"></span>
+        <span class="prio-dot" style="background:${PRIORITY_COLOR[t.priority] || 'var(--backlog)'}" title="${t.priority}"></span>
         <span class="time-chip">${t.spent>0 ? fmtH(t.spent)+" / " : ""}${fmtH(t.orig)}</span>
       </div>
     </div>
@@ -747,12 +781,28 @@ function renderAll(){
   renderBoard();
   renderPeople();
   document.getElementById("footerLine").textContent =
-    "ELOPEP · " + (state.sprint==="overview" ? "Todos los sprints" : state.sprint) + " · " + filtered().length + " subtareas";
+    projectLabel(state.project) + " · " + (state.sprint==="overview" ? "Todos los sprints" : state.sprint) + " · " + filtered().length + " subtareas";
+}
+
+function renderProjectSwitcher(){
+  document.getElementById("projectSwitcher").innerHTML = PROJECT_NAMES.map(p=>{
+    return `<button class="project-btn ${state.project===p?'active':''}" data-project="${p}">${projectLabel(p)}</button>`;
+  }).join("");
+  document.querySelectorAll(".project-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=> selectProject(btn.dataset.project));
+  });
+}
+
+function selectProject(p){
+  state.project = p;
+  renderProjectSwitcher();
+  selectSprint("overview");
 }
 
 function renderSprintGrid(){
+  const proj = SPRINTS[state.project] || {};
   document.getElementById("sprintGrid").innerHTML = SPRINT_NAMES.map(name=>{
-    const data = SPRINTS[name];
+    const data = proj[name] || [];
     const total = data.length;
     const origSum = data.reduce((a,t)=>a+t.orig,0);
     const doneH = data.filter(t=>t.status==="Done").reduce((a,t)=>a+t.orig,0);
@@ -761,7 +811,7 @@ function renderSprintGrid(){
     return `<div class="sprint-card ${empty?'empty-sprint':''}" data-sprint="${name}">
       <p class="sname">${name}</p>
       <div class="sbar"><div class="sbar-fill" style="width:${pct}%"></div></div>
-      <div class="smeta"><span>${empty ? "Sin datos" : pct+"% completado"}</span><span>${total} tareas</span></div>
+      <div class="smeta"><span>${loadError ? "Error de conexión" : (empty ? "Sin datos" : pct+"% completado")}</span><span>${total} tareas</span></div>
     </div>`;
   }).join("");
 
@@ -789,6 +839,7 @@ function selectSprint(name){
   const searchInput = document.getElementById("search");
   if(searchInput) searchInput.value = "";
 
+  document.getElementById("eyebrow").textContent = state.project ? projectLabel(state.project) : "Sprint Planning";
   document.getElementById("pageTitle").textContent = name === "overview" ? "Overview" : "Sprint tracker";
   document.getElementById("overviewView").style.display = name === "overview" ? "block" : "none";
   document.getElementById("sprintView").style.display = name === "overview" ? "none" : "block";
@@ -814,13 +865,50 @@ function refreshFilters(){
 
   const priorities = [...new Set(data.map(t=>t.priority))];
   const order = {Highest:0,High:1,Medium:2,Low:3};
-  priorities.sort((a,b)=>order[a]-order[b]);
+  priorities.sort((a,b)=>(order[a]??9)-(order[b]??9));
   const selP = document.getElementById("filterPriority");
   selP.innerHTML = `<option value="">Toda prioridad</option>` + priorities.map(p=>`<option value="${p}">${p}</option>`).join("");
 }
 
+function renderLegend(){
+  document.getElementById("legend").innerHTML = STATUSES.map(s=>
+    `<span><i style="background:var(--${STATUS_COLOR[s]})"></i>${s}</span>`
+  ).join("");
+}
+
+async function refreshAll(){
+  document.getElementById("updated").textContent = "Actualizando…";
+  await loadData();
+  if(!state.project || !PROJECT_NAMES.includes(state.project)){
+    state.project = PROJECT_NAMES.includes("1PD") ? "1PD" : PROJECT_NAMES[0];
+  }
+
+  if(PROJECT_NAMES.length === 0){
+    document.getElementById("updated").textContent = "Error";
+    document.getElementById("eyebrow").textContent = "Sprint Planning";
+    document.getElementById("pageTitle").textContent = "No se pudo conectar";
+    document.getElementById("projectSwitcher").innerHTML = "";
+    document.getElementById("tabs").innerHTML = `<button class="tab active">Overview</button>`;
+    document.getElementById("overviewView").style.display = "block";
+    document.getElementById("sprintView").style.display = "none";
+    document.getElementById("sprintGrid").innerHTML =
+      `<div class="empty" style="grid-column:1/-1;padding:2rem;">
+        <b style="color:var(--danger);">No se pudo cargar la hoja de datos.</b><br><br>
+        ${loadError ? "Detalle: " + loadError + "<br><br>" : ""}
+        Verifica que la hoja siga publicada (Archivo &gt; Compartir &gt; Publicar en la Web) y que el acceso general esté en "Cualquier persona con el enlace". Luego presiona Refrescar.
+      </div>`;
+    return;
+  }
+
+  document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
+  renderLegend();
+  renderProjectSwitcher();
+  selectSprint(state.sprint === "overview" ? "overview" : "overview");
+}
+
 function setup(){
   document.getElementById("updated").textContent = "Cargando…";
+  renderLegend();
 
   document.getElementById("search").addEventListener("input", e=>{ state.search = e.target.value; renderAll(); });
   document.getElementById("filterAssignee").addEventListener("change", e=>{ state.assignee = e.target.value; renderAll(); });
@@ -841,17 +929,9 @@ function setup(){
     document.getElementById("people").style.display = "flex";
   });
 
-  document.getElementById("refreshBtn").addEventListener("click", async ()=>{
-    document.getElementById("updated").textContent = "Actualizando…";
-    await loadAllSprints();
-    document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
-    selectSprint(state.sprint);
-  });
+  document.getElementById("refreshBtn").addEventListener("click", refreshAll);
 
-  loadAllSprints().then(()=>{
-    document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
-    selectSprint("overview");
-  });
+  refreshAll();
 }
 
 setup();
