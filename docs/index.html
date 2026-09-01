@@ -573,6 +573,7 @@ async function loadData(){
   PROJECT_NAMES = Object.keys(dataset);
   const sprintSet = new Set();
   PROJECT_NAMES.forEach(p => Object.keys(dataset[p]).forEach(s => sprintSet.add(s)));
+  ["Sprint 1","Sprint 2","Sprint 3","Sprint 4"].forEach(s => sprintSet.add(s));
   SPRINT_NAMES = [...sprintSet].sort((a,b)=>{
     const na = parseInt((a.match(/\d+/)||[999])[0],10);
     const nb = parseInt((b.match(/\d+/)||[999])[0],10);
