@@ -25,8 +25,6 @@
     --done-bg:#DEEBE3;
     --danger:#B23A2E;
     --danger-bg:#F5E1DE;
-    --validating:#6E4A8A;
-    --validating-bg:#E7E0EE;
     font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
   *{box-sizing:border-box;}
@@ -69,19 +67,6 @@
     color:var(--ink-faint);
     text-align:right;
   }
-  .updated-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;}
-  .refresh-btn{
-    font-family:"IBM Plex Mono",monospace;
-    font-size:11px;
-    text-transform:uppercase;
-    letter-spacing:.04em;
-    padding:.35rem .7rem;
-    border:1px solid var(--line-strong);
-    background:var(--paper-raised);
-    color:var(--ink-soft);
-    cursor:pointer;
-  }
-  .refresh-btn:hover{color:var(--accent);border-color:var(--accent);}
 
   .stats{
     display:grid;
@@ -255,7 +240,7 @@
 
   .board{
     display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    grid-template-columns:repeat(4,minmax(0,1fr));
     gap:14px;
   }
   .col{background:var(--paper-raised);border:1px solid var(--line);min-height:60px;}
@@ -305,27 +290,32 @@
   .person-head .pcount{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);}
   .person-body{padding:.5rem .6rem;display:flex;flex-direction:column;gap:.5rem;}
 
-  .empty{padding:1.2rem;text-align:center;font-size:12px;color:var(--ink-faint);}
-
-  .project-switcher{
-    display:flex;
-    gap:.5rem;
-    margin-bottom:1.4rem;
-    flex-wrap:wrap;
-  }
-  .project-btn{
+  .mail-btn{
     font-family:"IBM Plex Mono",monospace;
-    font-size:12px;
+    font-size:11px;
     text-transform:uppercase;
     letter-spacing:.04em;
-    padding:.6rem 1.1rem;
-    border:1px solid var(--ink);
-    background:var(--paper-raised);
-    color:var(--ink-soft);
+    padding:.5rem .9rem;
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:var(--paper-raised);
     cursor:pointer;
   }
-  .project-btn.active{background:var(--ink);color:var(--paper);}
-  .project-btn:hover:not(.active){background:var(--accent-soft);color:var(--ink);}
+  .mail-btn:hover{background:var(--ink);border-color:var(--ink);}
+  .pmail{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    color:var(--accent);
+    text-decoration:none;
+    border:1px solid var(--accent-soft);
+    background:var(--accent-soft);
+    padding:.2rem .5rem;
+  }
+  .pmail:hover{border-color:var(--accent);}
+  .view-toggle{margin-left:0;}
+  .controls .spacer{margin-left:auto;display:flex;gap:.6rem;}
+
+  .empty{padding:1.2rem;text-align:center;font-size:12px;color:var(--ink-faint);}
 
   footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:11px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;}
 
@@ -341,17 +331,12 @@
 <body>
 <div class="wrap">
 
-  <div class="project-switcher" id="projectSwitcher"></div>
-
   <header>
     <div>
-      <p class="eyebrow" id="eyebrow">Sprint Planning</p>
+      <p class="eyebrow">ELOPEP · Pepsi</p>
       <h1 id="pageTitle">Sprint tracker</h1>
     </div>
-    <div class="updated-wrap">
-      <div class="updated" id="updated"></div>
-      <button id="refreshBtn" class="refresh-btn">Refrescar</button>
-    </div>
+    <div class="updated" id="updated"></div>
   </header>
 
   <div class="tabs" id="tabs"></div>
@@ -370,7 +355,12 @@
     <section class="block">
       <p class="block-title">Carga por persona <span class="n" id="wl-n"></span></p>
       <div class="workload" id="workload"></div>
-      <div class="legend" id="legend"></div>
+      <div class="legend">
+        <span><i style="background:var(--backlog)"></i>Backlog</span>
+        <span><i style="background:var(--selected)"></i>Selected for development</span>
+        <span><i style="background:var(--progress)"></i>In progress</span>
+        <span><i style="background:var(--done)"></i>Done</span>
+      </div>
     </section>
 
     <section class="block">
@@ -380,9 +370,12 @@
         <select id="filterPriority">
           <option value="">Toda prioridad</option>
         </select>
-        <div class="view-toggle">
-          <button id="btnBoard" class="active">Board</button>
-          <button id="btnPeople">Por persona</button>
+        <div class="spacer">
+          <button class="mail-btn" id="btnEmail" title="Abre tu cliente de correo con el resumen">✉ Enviar por email</button>
+          <div class="view-toggle">
+            <button id="btnBoard" class="active">Board</button>
+            <button id="btnPeople">Por persona</button>
+          </div>
         </div>
       </div>
 
@@ -395,193 +388,42 @@
 </div>
 
 <script>
-const SOURCE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSc8DVLQtQU0h8CYMdwilJSU7USRH8uC4zjSqOFsKS3gHz56bwckonVssEwzKaW8NVUgDeAVe2kJQyv/pub?gid=1088099827&single=true&output=csv";
-const SHEET_ID = "1nbeh-yLcqc7h02G8eh20Kq4rI8Pv6xyLeaeZcqOJsGs";
-const SHEET_GID = "1088099827";
-
-const STATUSES = ["Backlog","Selected for Development","In Progress","En validación","Done"];
-const STATUS_COLOR = {
-  "Backlog":"backlog",
-  "Selected for Development":"selected",
-  "In Progress":"progress",
-  "En validación":"validating",
-  "Done":"done"
+const SPRINTS = {
+"Sprint 1": [
+{key:"ELOPEP-2344",summary:"Validar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:3600,remaining:3600,spent:0},
+{key:"ELOPEP-2342",summary:"Documentar estructura final",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2340",summary:"Definir estructura de las tablas",status:"In Progress",priority:"Medium",assignee:"Itzayana Hernández García",orig:10800,remaining:10800,spent:0},
+{key:"ELOPEP-2339",summary:"Identificar tablas necesarias para clustering",status:"Done",priority:"Medium",assignee:"Itzayana Hernández García",orig:7200,remaining:0,spent:7200},
+{key:"ELOPEP-2337",summary:"Apoyar con reuniones para la estructura",status:"Selected for Development",priority:"Medium",assignee:"Refugio Rangel",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2336",summary:"Definir estructura - Tabla 5",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2334",summary:"Definir estructura - Tabla 4",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2333",summary:"Definir estructura - Tabla 3",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2332",summary:"Definir estructura - Tabla 2",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2330",summary:"Documentación estructura",status:"Selected for Development",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:7200,spent:0},
+{key:"ELOPEP-2329",summary:"Validar Estructura",status:"Selected for Development",priority:"Highest",assignee:null,orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2328",summary:"Definir estructura - Tabla 1",status:"Backlog",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2327",summary:"Identificar tablas necesarias",status:"Selected for Development",priority:"High",assignee:"mayte.chi",orig:14400,remaining:14400,spent:0},
+{key:"ELOPEP-2324",summary:"Ajustes Mockup 1PD",status:"In Progress",priority:"Medium",assignee:"mayte.chi",orig:3600,remaining:3600,spent:0},
+{key:"ELOPEP-2323",summary:"Aprobación Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:7200,remaining:0,spent:10200},
+{key:"ELOPEP-2322",summary:"Mockup 1PD - Country",status:"Done",priority:"Medium",assignee:"mayte.chi",orig:21600,remaining:0,spent:39600},
+],
+"Sprint 2": [],
+"Sprint 3": [],
+"Sprint 4": [],
 };
+
+const SPRINT_NAMES = Object.keys(SPRINTS);
+
+// Correos por persona (nombre tal como aparece en Jira). Completa los que falten.
+const EMAILS = {
+  "Itzayana Hernández García": "",
+  "Refugio Rangel": "",
+  "mayte.chi": "",
+};
+
+const STATUSES = ["Backlog","Selected for Development","In Progress","Done"];
+const STATUS_COLOR = {Backlog:"backlog",             "Selected for Development":"selected", "In Progress":"progress", Done:"done"};
 const PRIORITY_COLOR = {Highest:"var(--danger)", High:"var(--progress)", Medium:"var(--selected)", Low:"var(--backlog)"};
-
-let PROJECT_NAMES = [];
-let SPRINT_NAMES = [];
-let SPRINTS = {};
-let loadError = null;
-
-function parseCSV(text){
-  const rows = [];
-  let row = [], field = "", inQuotes = false;
-  for(let i=0;i<text.length;i++){
-    const c = text[i];
-    if(inQuotes){
-      if(c === '"'){
-        if(text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
-      } else field += c;
-    } else {
-      if(c === '"') inQuotes = true;
-      else if(c === ",") { row.push(field); field = ""; }
-      else if(c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
-      else if(c === "\r") { /* skip */ }
-      else field += c;
-    }
-  }
-  if(field.length || row.length){ row.push(field); rows.push(row); }
-  return rows.filter(r => r.length > 1 || (r.length===1 && r[0] !== ""));
-}
-
-function parseDuration(str){
-  if(!str) return 0;
-  str = String(str).trim();
-  if(!str) return 0;
-  let total = 0;
-  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/i);
-  const mMatch = str.match(/(\d+)\s*m(?!s)/i);
-  if(hMatch) total += parseFloat(hMatch[1]) * 3600;
-  if(mMatch) total += parseInt(mMatch[1],10) * 60;
-  if(!hMatch && !mMatch){
-    const n = parseInt(str,10);
-    if(!isNaN(n)) total = n;
-  }
-  return Math.round(total);
-}
-
-function parseLabels(labelStr){
-  const parts = (labelStr||"").split(",").map(s=>s.trim()).filter(Boolean);
-  let project = null, sprint = null;
-  parts.forEach(p=>{
-    const m = p.match(/^sprint[\s-]?(\d+)$/i);
-    if(m){ sprint = "Sprint " + m[1]; }
-    else if(!project){ project = p; }
-  });
-  return { project: project || "Sin proyecto", sprint: sprint || "Sin sprint" };
-}
-
-function rowsToDataset(rows){
-  const dataset = {};
-  if(!rows.length) return dataset;
-  const headers = rows[0].map(h=>h.trim());
-  const idx = {
-    key: headers.indexOf("Issue key"),
-    summary: headers.indexOf("Summary"),
-    status: headers.indexOf("Status"),
-    assignee: headers.indexOf("Assignee"),
-    priority: headers.indexOf("Priority"),
-    labels: headers.indexOf("Labels"),
-    orig: headers.indexOf("Original Estimate") >= 0 ? headers.indexOf("Original Estimate") : headers.indexOf("Original estimate"),
-    remaining: headers.indexOf("Remaining Estimate"),
-    spent: headers.indexOf("Time Spent"),
-  };
-  rows.slice(1).filter(r=>r[idx.key]).forEach(r=>{
-    const { project, sprint } = parseLabels(r[idx.labels]);
-    if(!dataset[project]) dataset[project] = {};
-    if(!dataset[project][sprint]) dataset[project][sprint] = [];
-    dataset[project][sprint].push({
-      key: r[idx.key] || "",
-      summary: r[idx.summary] || "",
-      status: (r[idx.status] || "").trim(),
-      priority: (r[idx.priority] || "").trim() || "Medium",
-      assignee: (r[idx.assignee] || "").trim() || null,
-      orig: parseDuration(r[idx.orig]),
-      remaining: parseDuration(r[idx.remaining]),
-      spent: parseDuration(r[idx.spent]),
-    });
-  });
-  return dataset;
-}
-
-async function tryFetchText(url, timeoutMs){
-  const controller = new AbortController();
-  const timer = setTimeout(()=> controller.abort(), timeoutMs || 8000);
-  try{
-    const res = await fetch(url, {cache:"no-store", signal: controller.signal});
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const text = await res.text();
-    if(!text || text.trim().length === 0) throw new Error("Respuesta vacía");
-    return text;
-  }finally{
-    clearTimeout(timer);
-  }
-}
-
-function gvizFallback(url){
-  return new Promise(resolve=>{
-    const cbName = "gvizCb_" + Date.now();
-    const sep = url.includes("?") ? "&" : "?";
-    const fullUrl = url + sep + "tqx=out:json;responseHandler=" + cbName;
-    let settled = false;
-    const timeout = setTimeout(()=>{ finish(null); }, 10000);
-
-    function cleanup(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timeout); }
-    function finish(text){ if(settled) return; settled = true; cleanup(); resolve(text); }
-
-    window[cbName] = function(response){
-      try{
-        if(response.status === "error") throw new Error("gviz error");
-        const cols = response.table.cols.map(c=> c.label || c.id);
-        const csvLines = [cols.join(",")];
-        response.table.rows.forEach(r=>{
-          const vals = r.c.map(c=> c ? String(c.f !== undefined && c.f !== null ? c.f : c.v).replace(/"/g,'""') : "");
-          csvLines.push(vals.map(v => '"'+v+'"').join(","));
-        });
-        finish(csvLines.join("\n"));
-      }catch(e){ finish(null); }
-    };
-    const script = document.createElement("script");
-    script.src = fullUrl;
-    script.onerror = ()=> finish(null);
-    document.head.appendChild(script);
-  });
-}
-
-async function loadData(){
-  const gvizCsvUrl = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&gid=" + SHEET_GID;
-  const candidates = [
-    SOURCE_URL,
-    gvizCsvUrl,
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(SOURCE_URL),
-    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(SOURCE_URL),
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(gvizCsvUrl),
-  ];
-  let lastErr = null;
-  let text = null;
-
-  for(const url of candidates){
-    try{ text = await tryFetchText(url); if(text) break; }
-    catch(err){ lastErr = err; }
-  }
-
-  if(!text){
-    try{
-      const gvizJsonUrl = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json&gid=" + SHEET_GID;
-      text = await gvizFallback(gvizJsonUrl);
-    }catch(err){ lastErr = err; }
-  }
-
-  if(!text){
-    loadError = (lastErr && lastErr.message) || "No se pudo cargar la hoja";
-    return false;
-  }
-
-  const dataset = rowsToDataset(parseCSV(text));
-  SPRINTS = dataset;
-  PROJECT_NAMES = Object.keys(dataset);
-  const sprintSet = new Set();
-  PROJECT_NAMES.forEach(p => Object.keys(dataset[p]).forEach(s => sprintSet.add(s)));
-  ["Sprint 1","Sprint 2","Sprint 3","Sprint 4"].forEach(s => sprintSet.add(s));
-  SPRINT_NAMES = [...sprintSet].sort((a,b)=>{
-    const na = parseInt((a.match(/\d+/)||[999])[0],10);
-    const nb = parseInt((b.match(/\d+/)||[999])[0],10);
-    return na - nb;
-  });
-  loadError = null;
-  return true;
-}
 
 function hrs(sec){ return Math.round((sec/3600)*10)/10; }
 function fmtH(sec){ const h = hrs(sec); return (h % 1 === 0 ? h.toFixed(0) : h.toFixed(1)) + "h"; }
@@ -590,18 +432,58 @@ function initials(name){
   return name.split(" ").filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
 }
 
-let state = { search:"", assignee:"", priority:"", view:"board", sprint:"overview", project: null };
+function mailto(to, subject, body){
+  return "mailto:" + (to||"") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+}
+function sprintLabel(){ return state.sprint==="overview" ? "Todos los sprints" : state.sprint; }
+function taskLine(t){ return "- " + t.key + " · " + t.summary + (t.assignee ? " (" + t.assignee + ")" : " (Sin asignar)") + " · " + fmtH(t.orig); }
 
-function projectLabel(p){
-  return "Sprint Planning - Dashboard " + p;
+function buildSummary(){
+  const data = filtered();
+  const done = data.filter(t=>t.status==="Done").length;
+  const origSum = data.reduce((a,t)=>a+t.orig,0);
+  const spentSum = data.reduce((a,t)=>a+t.spent,0);
+  const remainSum = data.reduce((a,t)=>a+t.remaining,0);
+  const pct = data.length ? Math.round((done/data.length)*100) : 0;
+  const lines = [
+    "ELOPEP · " + sprintLabel(),
+    "",
+    "Avance: " + done + " de " + data.length + " subtareas (" + pct + "%)",
+    "Estimación total: " + fmtH(origSum),
+    "Tiempo registrado: " + fmtH(spentSum),
+    "Restante: " + fmtH(remainSum),
+  ];
+  STATUSES.forEach(st=>{
+    const items = data.filter(t=>t.status===st);
+    if(!items.length) return;
+    lines.push("", st + " (" + items.length + ")");
+    items.forEach(t=>lines.push(taskLine(t)));
+  });
+  return lines.join("\r\n");
 }
 
+function sendSummaryEmail(){
+  const people = [...new Set(filtered().map(t=>t.assignee).filter(Boolean))];
+  const to = people.map(n=>EMAILS[n]).filter(Boolean).join(",");
+  window.location.href = mailto(to, "ELOPEP · Resumen " + sprintLabel(), buildSummary());
+}
+
+function personMailHref(name, items){
+  const email = EMAILS[name];
+  if(!email) return "";
+  const pending = items.filter(t=>t.status!=="Done");
+  const body = "Hola " + name.split(" ")[0] + ",\r\n\r\nTareas pendientes en " + sprintLabel() + ":\r\n" +
+    (pending.length ? pending.map(taskLine).join("\r\n") : "- Sin pendientes") + "\r\n\nSaludos";
+  return mailto(email, "ELOPEP · Tus tareas en " + sprintLabel(), body);
+}
+
+let state = { search:"", assignee:"", priority:"", view:"board", sprint:"overview" };
+
 function currentData(){
-  const proj = SPRINTS[state.project] || {};
   if(state.sprint === "overview"){
-    return SPRINT_NAMES.flatMap(n => proj[n] || []);
+    return SPRINT_NAMES.flatMap(n => SPRINTS[n]);
   }
-  return proj[state.sprint] || [];
+  return SPRINTS[state.sprint] || [];
 }
 
 function filtered(){
@@ -648,10 +530,7 @@ function renderStatus(){
   const donePct = origSum ? doneH/origSum : 0;
 
   let level, label, detail;
-  if(loadError){
-    level = "risk"; label = "Error de conexión";
-    detail = "No se pudo cargar la hoja (" + loadError + "). Verifica que siga publicada y compartida.";
-  } else if(total === 0){
+  if(total === 0){
     level = "warn"; label = "Sin datos";
     detail = "Este sprint todavía no tiene tareas cargadas.";
   } else if(backlogPct > 0.35){
@@ -707,9 +586,8 @@ function renderWorkload(){
   const people = {};
   data.forEach(t=>{
     const name = t.assignee || "Sin asignar";
-    if(!people[name]) people[name] = {total:0};
-    STATUSES.forEach(s=>{ if(people[name][s] === undefined) people[name][s] = 0; });
-    people[name][t.status] = (people[name][t.status]||0) + t.orig;
+    if(!people[name]) people[name] = {Backlog:0,"Selected for Development":0,"In Progress":0,Done:0,total:0};
+    people[name][t.status] += t.orig;
     people[name].total += t.orig;
   });
   const names = Object.keys(people).sort((a,b)=>people[b].total-people[a].total);
@@ -734,13 +612,13 @@ function renderWorkload(){
 
 function cardHtml(t){
   const av = t.assignee ? `<div class="avatar">${initials(t.assignee)}</div>` : `<div class="avatar unassigned">?</div>`;
-  return `<div class="card" style="border-left-color:var(--${STATUS_COLOR[t.status] || 'line-strong'})">
+  return `<div class="card" style="border-left-color:var(--${STATUS_COLOR[t.status]})">
     <div class="key">${t.key}</div>
     <div class="summary">${t.summary}</div>
     <div class="card-meta">
       ${av}
       <div class="meta-right">
-        <span class="prio-dot" style="background:${PRIORITY_COLOR[t.priority] || 'var(--backlog)'}" title="${t.priority}"></span>
+        <span class="prio-dot" style="background:${PRIORITY_COLOR[t.priority]}" title="${t.priority}"></span>
         <span class="time-chip">${t.spent>0 ? fmtH(t.spent)+" / " : ""}${fmtH(t.orig)}</span>
       </div>
     </div>
@@ -771,8 +649,10 @@ function renderPeople(){
   document.getElementById("people").innerHTML = names.map(name=>{
     const items = data.filter(t=>(t.assignee||"Sin asignar")===name);
     const av = name==="Sin asignar" ? `<div class="avatar unassigned">?</div>` : `<div class="avatar">${initials(name)}</div>`;
+    const href = personMailHref(name, items);
+    const mail = href ? `<a class="pmail" href="${href}">✉ Email</a>` : "";
     return `<div class="person">
-      <div class="person-head">${av}<span class="pname">${name}</span><span class="pcount">${items.length} tareas</span></div>
+      <div class="person-head">${av}<span class="pname">${name}</span>${mail}<span class="pcount">${items.length} tareas</span></div>
       <div class="person-body">${items.map(cardHtml).join("")}</div>
     </div>`;
   }).join("");
@@ -782,28 +662,12 @@ function renderAll(){
   renderBoard();
   renderPeople();
   document.getElementById("footerLine").textContent =
-    projectLabel(state.project) + " · " + (state.sprint==="overview" ? "Todos los sprints" : state.sprint) + " · " + filtered().length + " subtareas";
-}
-
-function renderProjectSwitcher(){
-  document.getElementById("projectSwitcher").innerHTML = PROJECT_NAMES.map(p=>{
-    return `<button class="project-btn ${state.project===p?'active':''}" data-project="${p}">${projectLabel(p)}</button>`;
-  }).join("");
-  document.querySelectorAll(".project-btn").forEach(btn=>{
-    btn.addEventListener("click", ()=> selectProject(btn.dataset.project));
-  });
-}
-
-function selectProject(p){
-  state.project = p;
-  renderProjectSwitcher();
-  selectSprint("overview");
+    "ELOPEP · " + (state.sprint==="overview" ? "Todos los sprints" : state.sprint) + " · " + filtered().length + " subtareas";
 }
 
 function renderSprintGrid(){
-  const proj = SPRINTS[state.project] || {};
   document.getElementById("sprintGrid").innerHTML = SPRINT_NAMES.map(name=>{
-    const data = proj[name] || [];
+    const data = SPRINTS[name];
     const total = data.length;
     const origSum = data.reduce((a,t)=>a+t.orig,0);
     const doneH = data.filter(t=>t.status==="Done").reduce((a,t)=>a+t.orig,0);
@@ -812,7 +676,7 @@ function renderSprintGrid(){
     return `<div class="sprint-card ${empty?'empty-sprint':''}" data-sprint="${name}">
       <p class="sname">${name}</p>
       <div class="sbar"><div class="sbar-fill" style="width:${pct}%"></div></div>
-      <div class="smeta"><span>${loadError ? "Error de conexión" : (empty ? "Sin datos" : pct+"% completado")}</span><span>${total} tareas</span></div>
+      <div class="smeta"><span>${empty ? "Sin datos" : pct+"% completado"}</span><span>${total} tareas</span></div>
     </div>`;
   }).join("");
 
@@ -840,7 +704,6 @@ function selectSprint(name){
   const searchInput = document.getElementById("search");
   if(searchInput) searchInput.value = "";
 
-  document.getElementById("eyebrow").textContent = state.project ? projectLabel(state.project) : "Sprint Planning";
   document.getElementById("pageTitle").textContent = name === "overview" ? "Overview" : "Sprint tracker";
   document.getElementById("overviewView").style.display = name === "overview" ? "block" : "none";
   document.getElementById("sprintView").style.display = name === "overview" ? "none" : "block";
@@ -866,54 +729,19 @@ function refreshFilters(){
 
   const priorities = [...new Set(data.map(t=>t.priority))];
   const order = {Highest:0,High:1,Medium:2,Low:3};
-  priorities.sort((a,b)=>(order[a]??9)-(order[b]??9));
+  priorities.sort((a,b)=>order[a]-order[b]);
   const selP = document.getElementById("filterPriority");
   selP.innerHTML = `<option value="">Toda prioridad</option>` + priorities.map(p=>`<option value="${p}">${p}</option>`).join("");
 }
 
-function renderLegend(){
-  document.getElementById("legend").innerHTML = STATUSES.map(s=>
-    `<span><i style="background:var(--${STATUS_COLOR[s]})"></i>${s}</span>`
-  ).join("");
-}
-
-async function refreshAll(){
-  document.getElementById("updated").textContent = "Actualizando…";
-  await loadData();
-  if(!state.project || !PROJECT_NAMES.includes(state.project)){
-    state.project = PROJECT_NAMES.includes("1PD") ? "1PD" : PROJECT_NAMES[0];
-  }
-
-  if(PROJECT_NAMES.length === 0){
-    document.getElementById("updated").textContent = "Error";
-    document.getElementById("eyebrow").textContent = "Sprint Planning";
-    document.getElementById("pageTitle").textContent = "No se pudo conectar";
-    document.getElementById("projectSwitcher").innerHTML = "";
-    document.getElementById("tabs").innerHTML = `<button class="tab active">Overview</button>`;
-    document.getElementById("overviewView").style.display = "block";
-    document.getElementById("sprintView").style.display = "none";
-    document.getElementById("sprintGrid").innerHTML =
-      `<div class="empty" style="grid-column:1/-1;padding:2rem;">
-        <b style="color:var(--danger);">No se pudo cargar la hoja de datos.</b><br><br>
-        ${loadError ? "Detalle: " + loadError + "<br><br>" : ""}
-        Verifica que la hoja siga publicada (Archivo &gt; Compartir &gt; Publicar en la Web) y que el acceso general esté en "Cualquier persona con el enlace". Luego presiona Refrescar.
-      </div>`;
-    return;
-  }
-
-  document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"});
-  renderLegend();
-  renderProjectSwitcher();
-  selectSprint(state.sprint === "overview" ? "overview" : "overview");
-}
-
 function setup(){
-  document.getElementById("updated").textContent = "Cargando…";
-  renderLegend();
+  document.getElementById("updated").textContent = "Actualizado " + new Date().toLocaleDateString("es-MX", {year:"numeric",month:"short",day:"numeric"});
 
   document.getElementById("search").addEventListener("input", e=>{ state.search = e.target.value; renderAll(); });
   document.getElementById("filterAssignee").addEventListener("change", e=>{ state.assignee = e.target.value; renderAll(); });
   document.getElementById("filterPriority").addEventListener("change", e=>{ state.priority = e.target.value; renderAll(); });
+
+  document.getElementById("btnEmail").addEventListener("click", sendSummaryEmail);
 
   const btnBoard = document.getElementById("btnBoard");
   const btnPeople = document.getElementById("btnPeople");
@@ -930,9 +758,7 @@ function setup(){
     document.getElementById("people").style.display = "flex";
   });
 
-  document.getElementById("refreshBtn").addEventListener("click", refreshAll);
-
-  refreshAll();
+  selectSprint("overview");
 }
 
 setup();
